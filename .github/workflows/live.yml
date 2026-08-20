@@ -1,0 +1,46 @@
+name: Live Adapter Tests
+
+on:
+  schedule:
+    - cron: '0 6 * * *' # 06:00 UTC daily
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  live:
+    name: Sandbox live tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    # Repo Settings → Variables → Actions → New variable: LIVE_ENABLED=true
+    # Forks won't have this variable, so the job is skipped on fork PRs.
+    if: vars.LIVE_ENABLED == 'true'
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run live adapter tests
+        env:
+          LIVE: '1'
+          BLVD_API_KEY: ${{ secrets.BLVD_API_KEY }}
+          BLVD_BUSINESS_ID: ${{ secrets.BLVD_BUSINESS_ID }}
+          BLVD_API_URL: ${{ secrets.BLVD_API_URL }}
+          BLVD_DEFAULT_LOCATION_ID: ${{ secrets.BLVD_DEFAULT_LOCATION_ID }}
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          TWILIO_ACCOUNT_SID: ${{ secrets.TWILIO_ACCOUNT_SID }}
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+          UPSTASH_REDIS_REST_URL: ${{ secrets.UPSTASH_REDIS_REST_URL }}
+          UPSTASH_REDIS_REST_TOKEN: ${{ secrets.UPSTASH_REDIS_REST_TOKEN }}
+        run: npm run test:live

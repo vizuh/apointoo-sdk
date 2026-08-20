@@ -1,0 +1,40 @@
+name: Bug report
+description: Something is broken
+labels: [bug]
+body:
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: Actual vs expected behaviour.
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Reproduction steps
+      description: Minimal code or curl command to reproduce.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Package version
+      placeholder: '0.1.0'
+    validations:
+      required: true
+  - type: dropdown
+    id: adapter
+    attributes:
+      label: Adapter involved
+      options:
+        - BLVD
+        - OpenDental
+        - Brevo
+        - Twilio
+        - Sheets
+        - Supabase
+        - Memory
+        - Other
+    validations:
+      required: false

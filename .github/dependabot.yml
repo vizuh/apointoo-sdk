@@ -1,0 +1,39 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
+    # Don't auto-rebase all open PRs when one merges to main — cascading
+    # CI re-runs eat Actions minutes. Operator triggers `@dependabot rebase`
+    # when conflicts surface. Lesson from 2026-05-26's merge wave.
+    rebase-strategy: disabled
+    groups:
+      dev-tools:
+        patterns:
+          - 'vitest*'
+          - '@vitest*'
+          - 'typescript'
+          - 'eslint*'
+          - '@commitlint*'
+          - 'husky'
+          - '@changesets*'
+          - '@types/*'
+          - 'cross-env'
+          - 'fast-check'
+    ignore:
+      # Peer deps — update manually when consumers are ready
+      - dependency-name: 'zod'
+        update-types: ['version-update:semver-major']
+      - dependency-name: 'hono'
+        update-types: ['version-update:semver-major']
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    open-pull-requests-limit: 3
+    rebase-strategy: disabled

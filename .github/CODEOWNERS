@@ -1,0 +1,14 @@
+# Default owner for everything
+*                                    @Atroci
+
+# Core contracts — any change here needs ADR update
+src/core/                            @Atroci
+src/adapters/booking/adapter.ts      @Atroci
+src/adapters/persistence/adapter.ts  @Atroci
+src/adapters/notification/adapter.ts @Atroci
+src/adapters/dedup/adapter.ts        @Atroci
+src/adapters/state/adapter.ts        @Atroci
+src/queue/adapter.ts                 @Atroci
+
+# CI/CD — gate changes here
+.github/                             @Atroci
