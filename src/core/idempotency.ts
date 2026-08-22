@@ -12,6 +12,7 @@ export type IdempotencyKey = string
 export type IdempotencyRecord = {
   key: IdempotencyKey
   tenantId: string
+  requestHash: string
   /** Cached response body (status + JSON body serialized). */
   responseStatus: number
   responseBody: string
@@ -29,6 +30,16 @@ export interface IdempotencyStore {
 // Standard header name from RFC 9457-bis / Stripe convention.
 
 export const IDEMPOTENCY_HEADER = 'idempotency-key'
+
+export async function hashIdempotencyRequest(value: string): Promise<string> {
+  const digest = await globalThis.crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(value),
+  )
+  return Array.from(new Uint8Array(digest), (byte) =>
+    byte.toString(16).padStart(2, '0'),
+  ).join('')
+}
 
 export function readIdempotencyKey(headers: Headers | Record<string, string | undefined>): IdempotencyKey | undefined {
   if (headers instanceof Headers) {
@@ -123,6 +134,7 @@ export function upstashIdempotencyStore(
         const parsed = JSON.parse(body.result) as {
           key: IdempotencyKey
           tenantId: string
+          requestHash: string
           responseStatus: number
           responseBody: string
           createdAt: string
@@ -130,6 +142,7 @@ export function upstashIdempotencyStore(
         return {
           key: parsed.key,
           tenantId: parsed.tenantId,
+          requestHash: parsed.requestHash,
           responseStatus: parsed.responseStatus,
           responseBody: parsed.responseBody,
           createdAt: new Date(parsed.createdAt),
@@ -144,6 +157,7 @@ export function upstashIdempotencyStore(
       const value = JSON.stringify({
         key: record.key,
         tenantId: record.tenantId,
+        requestHash: record.requestHash,
         responseStatus: record.responseStatus,
         responseBody: record.responseBody,
         createdAt: record.createdAt.toISOString(),

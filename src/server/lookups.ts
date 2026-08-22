@@ -11,7 +11,10 @@ import { hhmmSchema, isoDateSchema, type BookingKitConfig } from '../core/schema
 import type { AdapterContext, Logger } from '../core/types.js'
 import type { DomainEventBus } from '../core/events.js'
 import { noopEventBus } from '../core/events.js'
-import type { IdempotencyStore } from '../core/idempotency.js'
+import {
+  hashIdempotencyRequest,
+  type IdempotencyStore,
+} from '../core/idempotency.js'
 
 // ── Reschedule ──────────────────────────────────────────────────────────────
 
@@ -59,11 +62,26 @@ export async function runReschedule(
   const eventBus = opts.eventBus ?? noopEventBus()
   const now = opts.now ?? (() => new Date())
   const idempotencyTtl = opts.idempotencyTtlSeconds ?? 24 * 60 * 60
+  const requestHash =
+    opts.idempotencyKey && opts.idempotencyStore
+      ? await hashIdempotencyRequest(
+          JSON.stringify(['reschedule', submissionId, bodyText]),
+        )
+      : null
 
   // ── Idempotency-Key replay (kit #73) ────────────────────────────────────
-  if (opts.idempotencyKey && opts.idempotencyStore) {
+  if (opts.idempotencyKey && opts.idempotencyStore && requestHash) {
     const cached = await opts.idempotencyStore.get(opts.config.projectKey, opts.idempotencyKey)
-    if (cached) return cachedToResult(cached.responseStatus, cached.responseBody)
+    if (cached) {
+      if (cached.requestHash !== requestHash) {
+        return fail(
+          'IDEMPOTENCY_CONFLICT',
+          'Idempotency key was already used for a different request.',
+          409,
+        )
+      }
+      return cachedToResult(cached.responseStatus, cached.responseBody)
+    }
   }
 
   let raw: unknown
@@ -130,12 +148,13 @@ export async function runReschedule(
       },
     }
     // ── Cache successful reschedule for idempotent replay ──────────────────
-    if (opts.idempotencyKey && opts.idempotencyStore) {
+    if (opts.idempotencyKey && opts.idempotencyStore && requestHash) {
       opts.idempotencyStore
         .put(
           {
             key: opts.idempotencyKey,
             tenantId: opts.config.projectKey,
+            requestHash,
             responseStatus: successResult.status,
             responseBody: JSON.stringify(successResult.body),
             createdAt: now(),
@@ -167,11 +186,26 @@ export async function runCancel(
   const eventBus = opts.eventBus ?? noopEventBus()
   const now = opts.now ?? (() => new Date())
   const idempotencyTtl = opts.idempotencyTtlSeconds ?? 24 * 60 * 60
+  const requestHash =
+    opts.idempotencyKey && opts.idempotencyStore
+      ? await hashIdempotencyRequest(
+          JSON.stringify(['cancel', submissionId, reason]),
+        )
+      : null
 
   // ── Idempotency-Key replay (kit #73) ────────────────────────────────────
-  if (opts.idempotencyKey && opts.idempotencyStore) {
+  if (opts.idempotencyKey && opts.idempotencyStore && requestHash) {
     const cached = await opts.idempotencyStore.get(opts.config.projectKey, opts.idempotencyKey)
-    if (cached) return cachedToResult(cached.responseStatus, cached.responseBody)
+    if (cached) {
+      if (cached.requestHash !== requestHash) {
+        return fail(
+          'IDEMPOTENCY_CONFLICT',
+          'Idempotency key was already used for a different request.',
+          409,
+        )
+      }
+      return cachedToResult(cached.responseStatus, cached.responseBody)
+    }
   }
 
   const state = await opts.stateStore.get(submissionId)
@@ -230,12 +264,13 @@ export async function runCancel(
       body: { success: true, submissionId, cancelled: true },
     }
     // ── Cache successful cancel for idempotent replay ───────────────────────
-    if (opts.idempotencyKey && opts.idempotencyStore) {
+    if (opts.idempotencyKey && opts.idempotencyStore && requestHash) {
       opts.idempotencyStore
         .put(
           {
             key: opts.idempotencyKey,
             tenantId: opts.config.projectKey,
+            requestHash,
             responseStatus: successResult.status,
             responseBody: JSON.stringify(successResult.body),
             createdAt: now(),

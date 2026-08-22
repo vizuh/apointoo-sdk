@@ -14,6 +14,7 @@ function makeRecord(
   return {
     key: 'client-key-abc-123' as IdempotencyKey,
     tenantId: 'tenant-a',
+    requestHash: 'request-hash',
     responseStatus: 200,
     responseBody: JSON.stringify({ success: true, submissionId: 'bk_x' }),
     createdAt: new Date('2026-05-13T10:00:00.000Z'),
@@ -124,12 +125,14 @@ describe('upstashIdempotencyStore', () => {
     const decoded = JSON.parse(decodeURIComponent(encodedValue)) as {
       key: string
       tenantId: string
+      requestHash: string
       responseStatus: number
       responseBody: string
       createdAt: string
     }
     expect(decoded.key).toBe(rec.key)
     expect(decoded.tenantId).toBe(rec.tenantId)
+    expect(decoded.requestHash).toBe(rec.requestHash)
     expect(decoded.responseStatus).toBe(rec.responseStatus)
     expect(decoded.responseBody).toBe(rec.responseBody)
     expect(decoded.createdAt).toBe(rec.createdAt.toISOString())
