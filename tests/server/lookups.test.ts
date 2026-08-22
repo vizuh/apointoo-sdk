@@ -10,6 +10,7 @@ import { memoryStateStore } from '../../src/adapters/state/memory.js'
 import type { BookingAdapter, RescheduleResult } from '../../src/adapters/booking/adapter.js'
 import type { BookingKitConfig } from '../../src/core/schemas.js'
 import type { Logger } from '../../src/core/types.js'
+import { memoryIdempotencyStore } from '../../src/core/idempotency.js'
 
 const silentLogger: Logger = {
   debug: () => undefined,
@@ -185,6 +186,33 @@ describe('runReschedule — state lookup', () => {
 })
 
 describe('runReschedule — happy + adapter error path', () => {
+  it('rejects reuse of an idempotency key with a different body', async () => {
+    const stateStore = memoryStateStore()
+    await seedConfirmedBooking(stateStore)
+    const options = {
+      config: makeConfig(),
+      booking: makeAdapter(),
+      stateStore,
+      logger: silentLogger,
+      idempotencyStore: memoryIdempotencyStore(),
+      idempotencyKey: 'reschedule-conflict',
+    }
+    await runReschedule(
+      'bk_x',
+      JSON.stringify({ newDate: '2026-08-15', newTime: '10:00' }),
+      options,
+    )
+
+    const result = await runReschedule(
+      'bk_x',
+      JSON.stringify({ newDate: '2026-08-16', newTime: '11:00' }),
+      options,
+    )
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.body.errorCode).toBe('IDEMPOTENCY_CONFLICT')
+  })
+
   it('returns 200 with vendorAppointmentId on success', async () => {
     const stateStore = memoryStateStore()
     await seedConfirmedBooking(stateStore)
@@ -379,6 +407,25 @@ describe('runCancel — cancellation policy', () => {
 })
 
 describe('runCancel — happy + adapter error path', () => {
+  it('rejects reuse of an idempotency key with a different reason', async () => {
+    const stateStore = memoryStateStore()
+    await seedConfirmedBooking(stateStore)
+    const options = {
+      config: makeConfig(),
+      booking: makeAdapter(),
+      stateStore,
+      logger: silentLogger,
+      idempotencyStore: memoryIdempotencyStore(),
+      idempotencyKey: 'cancel-conflict',
+    }
+    await runCancel('bk_x', 'first reason', options)
+
+    const result = await runCancel('bk_x', 'different reason', options)
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.body.errorCode).toBe('IDEMPOTENCY_CONFLICT')
+  })
+
   it('returns 200 success and transitions state to cancelled/CANCELLED_BY_USER', async () => {
     const stateStore = memoryStateStore()
     await seedConfirmedBooking(stateStore)

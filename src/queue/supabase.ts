@@ -1,41 +1,8 @@
 // Supabase OutboundQueue — Postgres via REST.
 // Atomic claim via stored procedure (RPC) using SELECT FOR UPDATE SKIP LOCKED.
 //
-// Migration SQL (apply once per project):
-//
-//   create table outbound_queue (
-//     id text primary key,
-//     tenant_id text not null,
-//     submission_id text not null,
-//     channel text not null check (channel in ('email','whatsapp','sms','webhook')),
-//     payload jsonb not null,
-//     status text not null check (status in ('pending','in_flight','done','failed','dead')),
-//     attempts int not null default 0,
-//     last_error text,
-//     next_retry_at timestamptz not null default now(),
-//     created_at timestamptz not null default now(),
-//     updated_at timestamptz not null default now()
-//   );
-//   create index outbound_queue_ready_idx on outbound_queue(next_retry_at)
-//     where status = 'pending';
-//
-//   create or replace function claim_queue_items(p_max int, p_worker_id text)
-//   returns setof outbound_queue
-//   language plpgsql as $$
-//   begin
-//     return query
-//     update outbound_queue q
-//     set status = 'in_flight', updated_at = now()
-//     where q.id in (
-//       select id from outbound_queue
-//       where status = 'pending' and next_retry_at <= now()
-//       order by next_retry_at
-//       for update skip locked
-//       limit p_max
-//     )
-//     returning q.*;
-//   end;
-//   $$;
+// Schema and lease recovery live in docs/migrations/001-state-and-queue.sql
+// and docs/migrations/002-queue-claim-leases.sql.
 
 import { errMessage, BookingError } from '../core/errors.js'
 import { truncate } from '../core/internal/strings.js'
@@ -59,7 +26,7 @@ export type SupabaseQueueOptions = {
    * (RLS gotcha). Construct the kit's queue adapter at module scope
    * and reuse the resulting instance.
    *
-   * Schema + claim RPC: see docs/migrations/001-state-and-queue.sql.
+   * Schema + claim RPC: see docs/migrations/002-queue-claim-leases.sql.
    */
   serviceRoleKey: string
   table?: string
@@ -128,6 +95,8 @@ export function supabaseQueue(opts: SupabaseQueueOptions): OutboundQueue {
         headers: headers({ Prefer: 'return=minimal' }),
         body: JSON.stringify({
           status: 'done',
+          claimed_by: null,
+          lease_expires_at: null,
           updated_at: new Date().toISOString(),
         }),
       })
@@ -156,6 +125,8 @@ export function supabaseQueue(opts: SupabaseQueueOptions): OutboundQueue {
           attempts,
           last_error: truncate(error, 1000),
           status: dead ? 'dead' : 'pending',
+          claimed_by: null,
+          lease_expires_at: null,
           next_retry_at: nextRetryAt.toISOString(),
           updated_at: new Date().toISOString(),
         }),

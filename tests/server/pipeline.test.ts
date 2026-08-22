@@ -164,6 +164,36 @@ describe('pipeline — idempotency replay', () => {
     // Booking adapter called exactly once — second call is a cache hit
     expect(booking.calls.createSession).toBe(1)
   })
+
+  it('rejects reuse of a key with a different request body', async () => {
+    const booking = memoryBookingAdapter()
+    const pipeline = createPipeline({
+      config,
+      booking,
+      persistence: memoryPersistenceAdapter(),
+      notification: memoryNotifier(),
+      dedup: memoryDedupStore(),
+      idempotencyStore: memoryIdempotencyStore(),
+      logger: silentLogger,
+    })
+    const idempotencyKey = 'client-key-conflict'
+    await pipeline(makeReq({ idempotencyKey }))
+    const changedBody = JSON.stringify({
+      ...JSON.parse(validBody),
+      name: 'Different Person',
+    })
+
+    const result = await pipeline(
+      makeReq({ idempotencyKey, bodyText: changedBody }),
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.status).toBe(409)
+    if (!result.ok) {
+      expect(result.body.errorCode).toBe('IDEMPOTENCY_CONFLICT')
+    }
+    expect(booking.calls.createSession).toBe(1)
+  })
 })
 
 describe('pipeline — state store writes', () => {

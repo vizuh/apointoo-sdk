@@ -33,6 +33,7 @@ import {
   type DomainEventBus,
 } from '../core/events.js'
 import {
+  hashIdempotencyRequest,
   type IdempotencyKey,
   type IdempotencyStore,
 } from '../core/idempotency.js'
@@ -128,6 +129,10 @@ export function createPipeline(opts: PipelineOptions) {
   const idempotencyTtl = opts.idempotencyTtlSeconds ?? 24 * 60 * 60
 
   return async function run(req: PipelineRequest): Promise<PipelineResult> {
+    const requestHash =
+      req.idempotencyKey && opts.idempotencyStore
+        ? await hashIdempotencyRequest(req.bodyText)
+        : null
     // Sentinel — replaced in stage 2 by generateSubmissionId. Disable
     // the no-useless-assignment rule: the sentinel exists so error-path
     // logs before stage 2 have a stable string to print; the value
@@ -137,9 +142,16 @@ export function createPipeline(opts: PipelineOptions) {
     const baseLogger = opts.logger
 
     // ── 0. Idempotency replay (ADR-013) ────────────────────────────────────
-    if (req.idempotencyKey && opts.idempotencyStore) {
+    if (req.idempotencyKey && opts.idempotencyStore && requestHash) {
       const cached = await opts.idempotencyStore.get(opts.config.projectKey, req.idempotencyKey)
       if (cached) {
+        if (cached.requestHash !== requestHash) {
+          return fail(
+            'IDEMPOTENCY_CONFLICT',
+            'Idempotency key was already used for a different request.',
+            409,
+          )
+        }
         baseLogger.info({
           evt: 'pipeline.idempotency.replay',
           ctx: {
@@ -534,12 +546,13 @@ export function createPipeline(opts: PipelineOptions) {
     }
 
     // ── 9. Idempotency cache write (ADR-013) ──────────────────────────────
-    if (req.idempotencyKey && opts.idempotencyStore) {
+    if (req.idempotencyKey && opts.idempotencyStore && requestHash) {
       opts.idempotencyStore
         .put(
           {
             key: req.idempotencyKey,
             tenantId: opts.config.projectKey,
+            requestHash,
             responseStatus: result.status,
             responseBody: JSON.stringify(result.body),
             createdAt: now(),
