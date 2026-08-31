@@ -24,7 +24,7 @@ jobs:
       image: semgrep/semgrep
 
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - name: Run Semgrep with auto config
         # `--config auto` pulls the rule packs Semgrep recommends for the
