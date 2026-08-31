@@ -85,7 +85,7 @@
   "optionalDependencies": {
     "@upstash/ratelimit": "^2.0.0",
     "@upstash/redis": "^1.34.0",
-    "googleapis": "^171.4.0",
+    "googleapis": "^176.0.0",
     "hono": "^4.12.23",
     "mongodb": "^6.13.0",
     "recal-sdk": "^1.0.1"
